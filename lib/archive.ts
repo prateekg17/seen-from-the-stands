@@ -122,56 +122,67 @@ export type Archive = {
   matches: Match[];
 };
 
+function assertUniqueIds(records: { id: string }[], message: string): void {
+  if (new Set(records.map((record) => record.id)).size !== records.length) {
+    throw new Error(message);
+  }
+}
+
+function assertUniqueProviderIds(records: { providerId?: string }[], message: string): void {
+  const providerIds = records.flatMap((record) => record.providerId ? [record.providerId] : []);
+  if (new Set(providerIds).size !== providerIds.length) {
+    throw new Error(message);
+  }
+}
+
+function assertKnownId(id: string, label: string, knownIds: Set<string>, matchId: string): void {
+  if (!knownIds.has(id)) {
+    throw new Error(`Match "${matchId}" references an unknown ${label} ID "${id}".`);
+  }
+}
+
+function assertMatchReferences(match: Match, entities: ArchiveEntities): void {
+  const teamIds = new Set(entities.teams.map((team) => team.id));
+  const playerIds = new Set(entities.players.map((player) => player.id));
+  const competitionIds = new Set(entities.competitions.map((item) => item.id));
+  const venueIds = new Set(entities.venues.map((venue) => venue.id));
+
+  assertKnownId(match.homeTeamId, "home team", teamIds, match.id);
+  assertKnownId(match.awayTeamId, "away team", teamIds, match.id);
+  assertKnownId(match.competitionId, "competition", competitionIds, match.id);
+  if (match.venueId !== null) {
+    assertKnownId(match.venueId, "venue", venueIds, match.id);
+  }
+  for (const playerId of match.appearances.playerIds) {
+    assertKnownId(playerId, "player", playerIds, match.id);
+  }
+  for (const event of match.events?.items ?? []) {
+    if (event.teamId !== null) {
+      assertKnownId(event.teamId, "team", teamIds, match.id);
+    }
+    if (event.playerId !== null) {
+      assertKnownId(event.playerId, "player", playerIds, match.id);
+    }
+  }
+}
+
 export function parseArchive(input: { entities: unknown; matches: unknown[] }): Archive {
   const entities = entitiesSchema.parse(input.entities);
   const matches = input.matches.map((match) => matchSchema.parse(match));
   const collections = Object.entries(entities) as [keyof ArchiveEntities, Entity[]][];
 
   for (const [collectionName, records] of collections) {
-    const ids = records.map((record) => record.id);
-    if (new Set(ids).size !== ids.length) {
-      throw new Error(`Duplicate IDs in ${collectionName}.`);
-    }
-    const providerIds = records.flatMap((record) => record.providerId ? [record.providerId] : []);
-    if (new Set(providerIds).size !== providerIds.length) {
-      throw new Error(`Duplicate provider IDs in ${collectionName}.`);
-    }
+    assertUniqueIds(records, `Duplicate IDs in ${collectionName}.`);
+    assertUniqueProviderIds(records, `Duplicate provider IDs in ${collectionName}.`);
   }
-  if (new Set(matches.map((match) => match.id)).size !== matches.length) {
-    throw new Error("Duplicate match IDs.");
-  }
-  const providerFixtureIds = matches.flatMap((match) => match.providerFixtureId ? [match.providerFixtureId] : []);
-  if (new Set(providerFixtureIds).size !== providerFixtureIds.length) {
-    throw new Error("Duplicate provider fixture IDs.");
-  }
-
-  const teamIds = new Set(entities.teams.map((team) => team.id));
-  const playerIds = new Set(entities.players.map((player) => player.id));
-  const competitionIds = new Set(entities.competitions.map((item) => item.id));
-  const venueIds = new Set(entities.venues.map((venue) => venue.id));
-
+  assertUniqueIds(matches, "Duplicate match IDs.");
+  assertUniqueProviderIds(
+    matches.map(({ providerFixtureId }) => ({ providerId: providerFixtureId })),
+    "Duplicate provider fixture IDs.",
+  );
   for (const match of matches) {
-    for (const [id, label, knownIds] of [
-      [match.homeTeamId, "home team", teamIds],
-      [match.awayTeamId, "away team", teamIds],
-      [match.competitionId, "competition", competitionIds],
-      ...(match.venueId === null ? [] : [[match.venueId, "venue", venueIds]]),
-      ...match.appearances.playerIds.map((id) => [id, "player", playerIds]),
-    ] as [string, string, Set<string>][]) {
-      if (!knownIds.has(id)) {
-        throw new Error(`Match "${match.id}" references an unknown ${label} ID "${id}".`);
-      }
-    }
-    for (const event of match.events?.items ?? []) {
-      if (event.teamId !== null && !teamIds.has(event.teamId)) {
-        throw new Error(`Match "${match.id}" event references an unknown team ID "${event.teamId}".`);
-      }
-      if (event.playerId !== null && !playerIds.has(event.playerId)) {
-        throw new Error(`Match "${match.id}" event references an unknown player ID "${event.playerId}".`);
-      }
-    }
+    assertMatchReferences(match, entities);
   }
-
   return { entities, matches };
 }
 
@@ -190,7 +201,7 @@ export function loadArchive(root = process.cwd()): Archive {
   const entities = readJson<unknown>(path.join(dataDirectory, "entities.json"));
   const files = readdirSync(matchDirectory)
     .filter((file) => file.endsWith(".json"))
-    .sort();
+    .sort((a, b) => a.localeCompare(b));
   const matches = files.map((file) => {
     const match = readJson<unknown>(path.join(matchDirectory, file));
     const parsedId = matchSchema.shape.id.parse(
@@ -215,6 +226,7 @@ export type ArchiveSummary = {
   venueCount: number;
   competitionCount: number;
   appearanceEvidenceCount: number;
+  hasIncompleteAppearances: boolean;
   mostWatchedTeams: { id: string; count: number }[];
   mostSeenPlayers: { id: string; count: number }[];
   highestScoringMatches: { id: string; goals: number }[];
@@ -258,6 +270,7 @@ export function summarizeArchive(matches: Match[]): ArchiveSummary {
     venueCount: new Set(matches.flatMap((match) => match.venueId ? [match.venueId] : [])).size,
     competitionCount: new Set(matches.map((match) => match.competitionId)).size,
     appearanceEvidenceCount: matches.filter((match) => match.appearances.coverage !== "unknown").length,
+    hasIncompleteAppearances: matches.some((match) => match.appearances.coverage !== "complete"),
     mostWatchedTeams: leaders(teamCounts),
     mostSeenPlayers: leaders(playerCounts),
     highestScoringMatches: scoringRecords

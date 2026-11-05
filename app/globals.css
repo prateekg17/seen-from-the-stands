@@ -9,7 +9,7 @@
   --panel: #ffffff;
   --line: #dce4dc;
   --gold: #d6ad48;
-  --rust: #bd5a35;
+  --rust: #a04425;
 }
 
 * {
@@ -247,6 +247,10 @@ h3 {
 
 .hero-link span {
   color: #e4c875;
+}
+
+.hero-link:hover {
+  color: #fffdf4;
 }
 
 .pitch-mark {
@@ -499,7 +503,7 @@ h3 {
 }
 
 .filter-field select:disabled {
-  color: #8a958e;
+  color: #626e67;
   background: #f3f5f2;
 }
 

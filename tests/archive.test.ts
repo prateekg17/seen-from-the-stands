@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import MatchFilters from "../components/match-filters";
 import { parseArchive, summarizeArchive } from "../lib/archive";
 
 const entities = {
@@ -134,4 +137,26 @@ test("requires completed scores and keeps unknown appearances empty", () => {
     () => parse([syntheticMatch({ appearances: { coverage: "partial", playerIds: ["alex-forward"], evidence: null } })]),
     /Confirmed player appearances require an evidence reference/,
   );
+});
+
+test("partial and unknown appearance lists keep the ranking incomplete", () => {
+  for (const coverage of ["partial", "unknown"]) {
+    const archive = parse([syntheticMatch({
+      appearances: { coverage, playerIds: [], evidence: null },
+    })]);
+    assert.equal(summarizeArchive(archive.matches).hasIncompleteAppearances, true);
+  }
+  assert.equal(summarizeArchive(parse([syntheticMatch()]).matches).hasIncompleteAppearances, false);
+  assert.equal(summarizeArchive([]).hasIncompleteAppearances, false);
+});
+
+test("renders non-completed recorded scores and statuses without counting their goals", () => {
+  for (const status of ["unfinished", "abandoned", "disputed"]) {
+    const archive = parse([syntheticMatch({ status, score: { home: 1, away: 0 } })]);
+    const markup = renderToStaticMarkup(createElement(MatchFilters, archive));
+    assert.match(markup, /aria-label="1 to 0">1 – 0/);
+    assert.match(markup, new RegExp(`class="status-pill">${status}`));
+    assert.equal(summarizeArchive(archive.matches).goals, 0);
+    assert.deepEqual(summarizeArchive(archive.matches).highestScoringMatches, []);
+  }
 });

@@ -5,8 +5,8 @@ import { useMemo, useState } from "react";
 import type { ArchiveEntities, Match } from "@/lib/archive";
 
 type Props = {
-  matches: Match[];
-  entities: ArchiveEntities;
+  readonly matches: Match[];
+  readonly entities: ArchiveEntities;
 };
 
 const unknownSeason = "__unknown__";
@@ -20,13 +20,79 @@ function formatDate(date: string) {
   }).format(new Date(`${date}T00:00:00Z`));
 }
 
+type MatchResultListProps = {
+  readonly matches: Match[];
+  readonly filteredMatches: Match[];
+  readonly teamNames: ReadonlyMap<string, string>;
+  readonly competitionNames: ReadonlyMap<string, string>;
+};
+
+function MatchResultList({
+  matches,
+  filteredMatches,
+  teamNames,
+  competitionNames,
+}: MatchResultListProps) {
+  if (matches.length === 0) {
+    return (
+      <section className="empty-state">
+        <h2>No matches in the book yet</h2>
+        <p>This is a record of games watched in person, not a calendar of every fixture played.</p>
+      </section>
+    );
+  }
+
+  if (filteredMatches.length === 0) {
+    return (
+      <section className="empty-state">
+        <h2>No matching matches</h2>
+        <p>Try changing a filter or reset them to see the full archive.</p>
+      </section>
+    );
+  }
+
+  return (
+    <div className="match-list">
+      {filteredMatches.map((match) => {
+        const home = teamNames.get(match.homeTeamId) ?? match.homeTeamId;
+        const away = teamNames.get(match.awayTeamId) ?? match.awayTeamId;
+        const competitionName = competitionNames.get(match.competitionId) ?? match.competitionId;
+        const isCompleted = match.status === "completed" && match.score !== null;
+        const scoreLabel = match.score !== null
+          ? `${match.score.home} to ${match.score.away}`
+          : match.status;
+        const scoreText = match.score !== null
+          ? `${match.score.home} – ${match.score.away}`
+          : "—";
+
+        return (
+          <Link className="match-row" href={`/matches/${match.id}/`} key={match.id}>
+            <span className="match-date">{formatDate(match.date)}<br />{match.season ?? "Season not recorded"}</span>
+            <span className="match-teams">
+              <span>{home}</span>
+              <span className="score" aria-label={scoreLabel}>{scoreText}</span>
+              <span>{away}</span>
+            </span>
+            <span className="match-meta">
+              {competitionName}
+              {!isCompleted && <><br /><span className="status-pill">{match.status}</span></>}
+            </span>
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function MatchFilters({ matches, entities }: Props) {
   const [season, setSeason] = useState("");
   const [team, setTeam] = useState("");
   const [competition, setCompetition] = useState("");
   const teamNames = new Map(entities.teams.map((record) => [record.id, record.name]));
   const competitionNames = new Map(entities.competitions.map((record) => [record.id, record.name]));
-  const seasons = [...new Set(matches.flatMap((match) => match.season ? [match.season] : []))].sort().reverse();
+  const seasons = [...new Set(matches.flatMap((match) => match.season ? [match.season] : []))]
+    .sort((a, b) => a.localeCompare(b))
+    .reverse();
   const teams = [...new Set(matches.flatMap((match) => [match.homeTeamId, match.awayTeamId]))]
     .sort((a, b) => (teamNames.get(a) ?? a).localeCompare(teamNames.get(b) ?? b));
   const competitions = [...new Set(matches.map((match) => match.competitionId))]
@@ -49,7 +115,7 @@ export default function MatchFilters({ matches, entities }: Props) {
     <>
       <section className="filter-panel" aria-label="Filter matches">
         <label className="filter-field">
-          Season
+          <span>Season</span>
           <select value={season} onChange={(event) => setSeason(event.target.value)} disabled={matches.length === 0}>
             <option value="">All seasons</option>
             {matches.some((match) => match.season === null) && <option value={unknownSeason}>Season not recorded</option>}
@@ -57,14 +123,14 @@ export default function MatchFilters({ matches, entities }: Props) {
           </select>
         </label>
         <label className="filter-field">
-          Team
+          <span>Team</span>
           <select value={team} onChange={(event) => setTeam(event.target.value)} disabled={matches.length === 0}>
             <option value="">All teams</option>
             {teams.map((id) => <option value={id} key={id}>{teamNames.get(id) ?? id}</option>)}
           </select>
         </label>
         <label className="filter-field">
-          Competition
+          <span>Competition</span>
           <select value={competition} onChange={(event) => setCompetition(event.target.value)} disabled={matches.length === 0}>
             <option value="">All competitions</option>
             {competitions.map((id) => <option value={id} key={id}>{competitionNames.get(id) ?? id}</option>)}
@@ -78,45 +144,12 @@ export default function MatchFilters({ matches, entities }: Props) {
         {hasFilters ? " match your filters" : " in the archive"}
       </p>
 
-      {matches.length === 0 ? (
-        <section className="empty-state">
-          <h2>No matches in the book yet</h2>
-          <p>
-            This is a record of games watched in person, not a calendar of every fixture played.
-          </p>
-        </section>
-      ) : filteredMatches.length === 0 ? (
-        <section className="empty-state">
-          <h2>No matching matches</h2>
-          <p>Try changing a filter or reset them to see the full archive.</p>
-        </section>
-      ) : (
-        <div className="match-list">
-          {filteredMatches.map((match) => {
-            const home = teamNames.get(match.homeTeamId) ?? match.homeTeamId;
-            const away = teamNames.get(match.awayTeamId) ?? match.awayTeamId;
-            const competitionName = competitionNames.get(match.competitionId) ?? match.competitionId;
-            const isCompleted = match.status === "completed" && match.score !== null;
-
-            return (
-              <Link className="match-row" href={`/matches/${match.id}/`} key={match.id}>
-                <span className="match-date">{formatDate(match.date)}<br />{match.season ?? "Season not recorded"}</span>
-                <span className="match-teams">
-                  <span>{home}</span>
-                  <span className="score" aria-label={isCompleted ? `${match.score!.home} to ${match.score!.away}` : match.status}>
-                    {isCompleted ? `${match.score!.home} – ${match.score!.away}` : "—"}
-                  </span>
-                  <span>{away}</span>
-                </span>
-                <span className="match-meta">
-                  {competitionName}
-                  {!isCompleted && <><br /><span className="status-pill">{match.status}</span></>}
-                </span>
-              </Link>
-            );
-          })}
-        </div>
-      )}
+      <MatchResultList
+        matches={matches}
+        filteredMatches={filteredMatches}
+        teamNames={teamNames}
+        competitionNames={competitionNames}
+      />
     </>
   );
 }

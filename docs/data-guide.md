@@ -28,7 +28,7 @@ The following is a **synthetic format example only**—it is not a real attendan
 
 - Every match records a calendar date, nullable season, explicit status, home and away team IDs, competition ID, nullable venue, player-appearance coverage, and manual provenance.
 - A `completed` match requires a score. `score` is the recorded final score including extra time, if played, and excluding shootout kicks. Store a shootout separately. Never use shootout kicks in goal totals.
-- `unfinished`, `abandoned` and `disputed` records are allowed without a score and do not contribute to completed-score totals.
+- `unfinished`, `abandoned` and `disputed` records are allowed without a score and do not contribute to completed-score totals. If a score is recorded, it is displayed alongside the match status, not labelled as a final score.
 - Set `extraTimePlayed` to `true`, `false` or `null` when not known. Do not infer a season, venue, score, event or statistic.
 - Appearance `playerIds` contain starters and substitutes who entered the pitch, each once. Unused substitutes are not appearances. `complete` means the list is complete; `partial` means it contains only confirmed players; `unknown` requires an empty list. Any confirmed player IDs require a non-empty `appearances.evidence` reference, which is shown with the player list.
 - Events and statistics can be `null` when unavailable. Within a known but incomplete set, leave unknown values `null`; do not turn missing data into zero.

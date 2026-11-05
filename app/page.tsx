@@ -92,7 +92,7 @@ export default function Home() {
               </ul>
               <p className="coverage-note">
                 Confirmed appearances in {summary.appearanceEvidenceCount} of {summary.matchCount} archived matches.
-                {summary.appearanceEvidenceCount < summary.matchCount ? " Incomplete coverage; not an all-time ranking." : ""}
+                {summary.hasIncompleteAppearances ? " Incomplete coverage; not an all-time ranking." : ""}
               </p>
             </>
           ) : <p>Player appearances will show here when they are sourced.</p>}
@@ -121,7 +121,7 @@ export default function Home() {
 
       <p className="coverage-note">
         Appearance notes for {summary.appearanceEvidenceCount} of {summary.matchCount} matches.
-        The player list is incomplete wherever an appearance is still unknown.
+        The player list is incomplete wherever appearance coverage is partial or unknown.
       </p>
       <p className="archive-disclaimer">Still a work in progress—not yet a complete record of every match attended since 2009.</p>
       {matches.length === 0 && (
